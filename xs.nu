@@ -18,7 +18,8 @@ export def _cat [ store: string, flags: record ] {
     let path = "/"
     let query = ( build-query $flags )
     let url = $"localhost($path)($query)"
-    curl -sN --unix-socket $"($store)/sock" $url | lines | each { |x| $x | from json }
+    curl -v -sN --unix-socket $"($store)/sock" $url | lines | each { |x| $x | from json }
+    print $env.LAST_EXIT_CODE
 }
 
 export def cat [

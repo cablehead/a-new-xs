@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use scru128::Scru128Id;
+use ssri::Integrity;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -11,11 +12,18 @@ use tokio::sync::mpsc;
 use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
+pub enum Content {
+    Full(Integrity),
+    Stream,
+    Empty,
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
 pub struct Frame {
     pub id: Scru128Id,
     pub topic: String,
-    pub hash: Option<ssri::Integrity>,
     pub meta: Option<serde_json::Value>,
+    pub content: Content,
 }
 
 #[derive(Clone)]
@@ -138,8 +146,8 @@ impl Store {
                                     let frame = Frame {
                                         id: scru128::new(),
                                         topic: "stream.cross.threshold".into(),
-                                        hash: None,
                                         meta: None,
+                                        content: Content::Empty,
                                     };
                                     if tx.blocking_send(frame).is_err() {
                                         continue 'outer;
@@ -176,7 +184,7 @@ impl Store {
                     let frame = Frame {
                         id: scru128::new(),
                         topic: "stream.cross.pulse".into(),
-                        hash: None,
+                        content: Content::Empty,
                         meta: None,
                     };
                     if tx.send(frame).await.is_err() {
@@ -194,7 +202,7 @@ impl Store {
         res.map(|value| serde_json::from_slice(&value).unwrap())
     }
 
-    pub async fn cas_reader(&self, hash: ssri::Integrity) -> cacache::Result<cacache::Reader> {
+    pub async fn cas_reader(&self, hash: Integrity) -> cacache::Result<cacache::Reader> {
         cacache::Reader::open_hash(&self.path.join("cacache"), hash).await
     }
 
@@ -204,25 +212,25 @@ impl Store {
             .await
     }
 
-    pub async fn cas_insert(&self, content: &str) -> cacache::Result<ssri::Integrity> {
+    pub async fn cas_insert(&self, content: &str) -> cacache::Result<Integrity> {
         cacache::write_hash(&self.path.join("cacache"), content).await
     }
 
-    pub async fn cas_read(&self, hash: &ssri::Integrity) -> cacache::Result<Vec<u8>> {
+    pub async fn cas_read(&self, hash: &Integrity) -> cacache::Result<Vec<u8>> {
         cacache::read_hash(&self.path.join("cacache"), hash).await
     }
 
     pub async fn append(
         &mut self,
         topic: &str,
-        hash: Option<ssri::Integrity>,
         meta: Option<serde_json::Value>,
+        content: Content,
     ) -> Frame {
         let frame = Frame {
             id: scru128::new(),
             topic: topic.to_string(),
-            hash,
             meta,
+            content,
         };
         let encoded: Vec<u8> = serde_json::to_vec(&frame).unwrap();
         self.partition.insert(frame.id.to_bytes(), encoded).unwrap();

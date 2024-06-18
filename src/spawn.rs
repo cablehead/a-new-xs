@@ -1,5 +1,5 @@
 use crate::store::ReadOptions;
-use crate::store::{FollowOption, Store};
+use crate::store::{FollowOption, Store, Content};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
@@ -75,7 +75,7 @@ pub async fn spawn(mut store: Store) -> Result<(), Box<dyn std::error::Error + S
                 Ok(0) => break, // EOF
                 Ok(_) => {
                     let hash = store.cas_insert(&line).await.unwrap();
-                    let frame = store.append("ws.recv", Some(hash.clone()), None).await;
+                    let frame = store.append("ws.recv", None, Content::Full(hash)).await;
                     eprintln!("inserted: {} {:?} :: {:?}", line, hash, frame);
                 }
                 Err(e) => {

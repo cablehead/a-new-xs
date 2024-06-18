@@ -22,7 +22,7 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 
 use crate::listener::Listener;
-use crate::store::{FollowOption, ReadOptions, Store};
+use crate::store::{FollowOption, ReadOptions, Store, Content};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
@@ -109,15 +109,15 @@ async fn handle(
     let frame = store
         .append(
             "http.request",
-            Some(hash),
             Some(serde_json::to_value(&req_meta).unwrap()),
+            Content::Full(hash),
         )
         .await;
 
     async fn wait_for_response(
         store: &Store,
         frame_id: Scru128Id,
-    ) -> Result<(Option<ssri::Integrity>, ResponseMeta), &str> {
+    ) -> Result<(Content, ResponseMeta), &str> {
         let mut recver = store
             .read(ReadOptions {
                 follow: FollowOption::On,
@@ -131,7 +131,7 @@ async fn handle(
                 if let Some(meta) = frame.meta {
                     if let Ok(res) = serde_json::from_value::<ResponseMeta>(meta) {
                         if res.request_id == frame_id {
-                            return Ok((frame.hash, res));
+                            return Ok((frame.content, res));
                         }
                     }
                 }

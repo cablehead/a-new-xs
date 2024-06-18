@@ -20,7 +20,7 @@ use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 
-use crate::store::{ReadOptions, Store};
+use crate::store::{ReadOptions, Content, Store};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 type HTTPResult = Result<Response<BoxBody<Bytes, BoxError>>, BoxError>;
@@ -111,6 +111,9 @@ async fn post(mut store: Store, req: Request<hyper::body::Incoming>) -> HTTPResu
     eprintln!("uri: {:?}", &parts.uri.path());
     eprintln!("headers: {:?}", &parts.headers);
 
+    // is the request body empty, full or streaming?
+    eprintln!("BODY: {:?}", &body);
+
     let writer = store.cas_writer().await?;
 
     // convert writer from async-std -> tokio
@@ -139,7 +142,11 @@ async fn post(mut store: Store, req: Request<hyper::body::Incoming>) -> HTTPResu
 
     let hash = writer.commit().await?;
     let frame = store
-        .append(parts.uri.path().trim_start_matches('/'), Some(hash), meta)
+        .append(
+            parts.uri.path().trim_start_matches('/'),
+            meta,
+            Content::Full(hash),
+        )
         .await;
 
     Ok(Response::builder()
